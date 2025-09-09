@@ -54,7 +54,7 @@ func (m *MPRISClient) ListPlayers() ([]string, error) {
 		return nil, fmt.Errorf("no MPRIS players found")
 	}
 
-	// fmt.Println(mprisPlayers) // For Debugging
+	// fmt.Println(mprisPlayers) // Debug
 	return mprisPlayers, nil
 }
 
@@ -73,7 +73,15 @@ func (m *MPRISClient) StartListening(ctx context.Context, updates chan<- PlayerI
 		dbus.WithMatchMember("PropertiesChanged"),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to add signal match: %w", err)
+		return fmt.Errorf("failed to add signal match for PropertiesChanged: %w", err)
+	}
+
+	err = m.Conn.AddMatchSignal(
+		dbus.WithMatchInterface(DbusInterface),
+		dbus.WithMatchMember("NameOwnerChanged"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add signal match for NameOwnerChanged: %w", err)
 	}
 
 	fmt.Println("Listening...")
@@ -82,8 +90,8 @@ func (m *MPRISClient) StartListening(ctx context.Context, updates chan<- PlayerI
 		for {
 			select {
 			case signal := <-listener:
-				if signal.Name == PropertiesChanged {
-
+				switch signal.Name {
+				case PropertiesChanged:
 					playerInfo, err := m.GetPlayerInfo(signal.Sender)
 					if err != nil {
 						fmt.Printf("Error getting updated player info: %s\n", err)
@@ -92,10 +100,36 @@ func (m *MPRISClient) StartListening(ctx context.Context, updates chan<- PlayerI
 
 					m.Players[signal.Sender] = playerInfo
 
+					if playerInfo.Status.PlaybackStatus == "Playing" {
+						m.ActivePlayer = signal.Sender
+					}
+
 					updates <- *playerInfo
 					// for _, subscriber := range m.Subscribers {
 					// 	subscriber <- *playerInfo
 					// }
+				case NameOwnerChanged:
+					if len(signal.Body) >= 3 {
+						serviceName := signal.Body[0].(string)
+						newOwner := signal.Body[2].(string)
+
+						if strings.HasPrefix(serviceName, MPRISNamespace) {
+							if newOwner == "" {
+								fmt.Printf("Player disappeared: %s\n", serviceName)
+								delete(m.Players, serviceName)
+							} else {
+								playerInfo, err := m.GetPlayerInfo(serviceName)
+								if err == nil {
+									fmt.Printf("Player appeared: %s\n", serviceName)
+									m.Players[serviceName] = playerInfo
+								}
+								if playerInfo.Status.PlaybackStatus == "Playing" {
+									m.ActivePlayer = signal.Sender
+								}
+							}
+						}
+					}
+
 				}
 			case <-ctx.Done():
 				return
