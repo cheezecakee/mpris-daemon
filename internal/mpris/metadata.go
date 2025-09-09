@@ -47,11 +47,17 @@ func (m *MPRISClient) GetPlayerInfo(serviceName string) (*PlayerInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse player status: %s", err)
 	}
+	baseInfo, err := m.GetBaseProperties(serviceName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get base info: %s", err)
+	}
 
 	return &PlayerInfo{
-		ServiceName: serviceName,
-		Metadata:    metaData,
-		Status:      playerStatus,
+		ServiceName:  serviceName,
+		Identity:     baseInfo["Identity"].(string),
+		DesktopEntry: baseInfo["DesktopEntry"].(string),
+		Metadata:     metaData,
+		Status:       playerStatus,
 	}, nil
 }
 
@@ -69,7 +75,7 @@ func (m *MPRISClient) ParsePlayerStatus(variants map[string]dbus.Variant) (*Play
 		CanGoPrevious:  variants["CanGoPrevious"].Value().(bool),
 	}
 
-	fmt.Printf("Player Status:\n%+v\n", playerStatus)
+	// fmt.Printf("Player Status:\n%+v\n", playerStatus) // Debug
 	return playerStatus, nil
 }
 
@@ -88,7 +94,12 @@ func (m *MPRISClient) ParseMetadata(variants map[string]dbus.Variant) (*TrackMet
 		}
 	}
 
-	length := time.Duration(metaData["mpris:length"].Value().(uint64)) * time.Microsecond
+	var length time.Duration
+	if lengthVariant, exists := metaData["mpris:length"]; exists {
+		if lengthValue := lengthVariant.Value(); lengthValue != nil {
+			length = time.Duration(metaData["mpris:length"].Value().(uint64)) * time.Microsecond
+		}
+	}
 
 	trackMetadata = &TrackMetadata{
 		TrackID: extractStringProperty(metaData, "mpris:trackid"),
@@ -99,7 +110,7 @@ func (m *MPRISClient) ParseMetadata(variants map[string]dbus.Variant) (*TrackMet
 		Title:   extractStringProperty(metaData, "xesam:title"),
 		URL:     extractStringProperty(metaData, "xesam:url"),
 	}
-	fmt.Printf("Track metadata:\n%+v\n", trackMetadata)
+	// fmt.Printf("Track metadata:\n%+v\n", trackMetadata) // Debug
 	return trackMetadata, nil
 }
 
@@ -120,6 +131,19 @@ func (m *MPRISClient) GetPlayerProperties(serviceName string) map[string]dbus.Va
 	// fmt.Println("===***===")
 
 	return props
+}
+
+func (m *MPRISClient) GetBaseProperties(serviceName string) (map[string]any, error) {
+	call := m.Conn.Object(serviceName, MPRISObjectPath).Call(DbusPropertiesGetAll, 0, MPRISInterface)
+
+	var props map[string]any
+	err := call.Store(&props)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get properties: %s", err)
+	}
+	// fmt.Printf("%v", props) // Debug
+
+	return props, nil
 }
 
 func extractStringProperty(props map[string]dbus.Variant, key string) string {
