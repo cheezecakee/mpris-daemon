@@ -2,6 +2,7 @@
 package mpris
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -30,7 +31,8 @@ func NewMPRISClient() (*MPRISClient, error) {
 	fmt.Println("DBUS connect: ", newConn.Connected())
 
 	return &MPRISClient{
-		Conn: newConn,
+		Conn:    newConn,
+		Players: make(map[string]*PlayerInfo),
 	}, nil
 }
 
@@ -52,6 +54,54 @@ func (m *MPRISClient) ListPlayers() ([]string, error) {
 		return nil, fmt.Errorf("no MPRIS players found")
 	}
 
-	fmt.Println(mprisPlayers)
+	// fmt.Println(mprisPlayers) // For Debugging
 	return mprisPlayers, nil
+}
+
+func (m *MPRISClient) Subscriber(subscriber chan<- PlayerInfo) {
+	m.Subscribers = append(m.Subscribers, subscriber)
+}
+
+func (m *MPRISClient) StartListening(ctx context.Context, updates chan<- PlayerInfo) error {
+	listener := make(chan *dbus.Signal, 10)
+
+	m.Conn.Signal(listener)
+
+	err := m.Conn.AddMatchSignal(
+		dbus.WithMatchObjectPath(MPRISObjectPath),
+		dbus.WithMatchInterface(PropertiesInterface),
+		dbus.WithMatchMember("PropertiesChanged"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add signal match: %w", err)
+	}
+
+	fmt.Println("Listening...")
+
+	go func() {
+		for {
+			select {
+			case signal := <-listener:
+				if signal.Name == PropertiesChanged {
+
+					playerInfo, err := m.GetPlayerInfo(signal.Sender)
+					if err != nil {
+						fmt.Printf("Error getting updated player info: %s\n", err)
+						continue
+					}
+
+					m.Players[signal.Sender] = playerInfo
+
+					updates <- *playerInfo
+					// for _, subscriber := range m.Subscribers {
+					// 	subscriber <- *playerInfo
+					// }
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return nil
 }

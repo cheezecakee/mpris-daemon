@@ -6,6 +6,7 @@ const (
 	MPRISInterface      = "org.mpris.MediaPlayer2"
 	PlayerInterface     = "org.mpris.MediaPlayer2.Player"
 	PropertiesInterface = "org.freedesktop.DBus.Properties"
+	PropertiesChanged   = "org.freedesktop.DBus.Properties.PropertiesChanged"
 
 	DBusObjectPath       = "/org/freedesktop/DBus"
 	DbusDestination      = "org.freedesktop.DBus"
