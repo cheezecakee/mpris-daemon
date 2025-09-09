@@ -33,34 +33,44 @@ type PlayerInfo struct {
 	ServiceName  string // org.mpris.MediaPlayer2.spotify
 	Identity     string // Player name (e.g., "Spotify")
 	DesktopEntry string // Desktop file name
-	Metadata     TrackMetadata
-	Status       PlayerStatus
+	Metadata     *TrackMetadata
+	Status       *PlayerStatus
 }
 
-/**
-[org.mpris.MediaPlayer2.spotify]
-Position: @x 96666000
-CanGoNext: true
-Metadata: {"mpris:artUrl": <"https://i.scdn.co/image/ab67616d0000b2734dcb6c5df15cf74596ab25a4">, "mpris:length": <@t 194607000>, "mpris:trackid": <"/com/spotify/track/1CPZ5BxNNd0n0nF4Orb9JS">, "xesam:album": <"KPop Demon Hunters (Soundtrack from the Netflix Film)">, "xesam:albumArtist": <["KPop Demon Hunters Cast"]>, "xesam:artist": <["HUNTR/X"]>, "xesam:autoRating": <@d 1>, "xesam:discNumber": <1>, "xesam:title": <"Golden">, "xesam:trackNumber": <4>, "xesam:url": <"https://open.spotify.com/track/1CPZ5BxNNd0n0nF4Orb9JS">}
-Volume: @d 1
-MaximumRate: @d 1
-PlaybackStatus: "Playing"
-CanControl: true
-Shuffle: false
-MinimumRate: @d 1
-CanPause: true
-CanPlay: true
-Rate: @d 1
-CanSeek: true
-CanGoPrevious: true
-LoopStatus: "Track"
-**/
-
-func extractStringProperty(props map[string]dbus.Variant, key string) string {
-	if variant, exists := props[key]; exists {
-		return variant.String()
+func (m *MPRISClient) GetPlayerInfo(serviceName string) (*PlayerInfo, error) {
+	variant := m.GetPlayerProperties(serviceName)
+	metaData, err := m.ParseMetadata(variant)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %s", err)
 	}
-	return ""
+	playerStatus, err := m.ParsePlayerStatus(variant)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse player status: %s", err)
+	}
+
+	return &PlayerInfo{
+		ServiceName: serviceName,
+		Metadata:    metaData,
+		Status:      playerStatus,
+	}, nil
+}
+
+func (m *MPRISClient) ParsePlayerStatus(variants map[string]dbus.Variant) (*PlayerStatus, error) {
+	position := time.Duration(variants["Position"].Value().(int64)) * time.Microsecond
+	playerStatus := &PlayerStatus{
+		PlaybackStatus: extractStringProperty(variants, "PlaybackStatus"),
+		Position:       position,
+		Rate:           variants["Rate"].Value().(float64),
+		Volume:         variants["Volume"].Value().(float64),
+		CanControl:     variants["CanControl"].Value().(bool),
+		CanPlay:        variants["CanPlay"].Value().(bool),
+		CanPause:       variants["CanPause"].Value().(bool),
+		CanGoNext:      variants["CanGoNext"].Value().(bool),
+		CanGoPrevious:  variants["CanGoPrevious"].Value().(bool),
+	}
+
+	fmt.Printf("Player Status:\n%+v\n", playerStatus)
+	return playerStatus, nil
 }
 
 func (m *MPRISClient) ParseMetadata(variants map[string]dbus.Variant) (*TrackMetadata, error) {
@@ -112,20 +122,9 @@ func (m *MPRISClient) GetPlayerProperties(serviceName string) map[string]dbus.Va
 	return props
 }
 
-func (m *MPRISClient) ParsePlayerStatus(variants map[string]dbus.Variant) (*PlayerStatus, error) {
-	position := time.Duration(variants["Position"].Value().(int64)) * time.Microsecond
-	playerStatus := &PlayerStatus{
-		PlaybackStatus: extractStringProperty(variants, "PlaybackStatus"),
-		Position:       position,
-		Rate:           variants["Rate"].Value().(float64),
-		Volume:         variants["Volume"].Value().(float64),
-		CanControl:     variants["CanControl"].Value().(bool),
-		CanPlay:        variants["CanPlay"].Value().(bool),
-		CanPause:       variants["CanPause"].Value().(bool),
-		CanGoNext:      variants["CanGoNext"].Value().(bool),
-		CanGoPrevious:  variants["CanGoPrevious"].Value().(bool),
+func extractStringProperty(props map[string]dbus.Variant, key string) string {
+	if variant, exists := props[key]; exists {
+		return variant.String()
 	}
-
-	fmt.Printf("Player Status:\n%+v\n", playerStatus)
-	return playerStatus, nil
+	return ""
 }
