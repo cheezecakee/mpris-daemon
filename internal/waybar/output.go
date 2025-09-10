@@ -20,12 +20,12 @@ func FormatForWaybar(player mpris.PlayerInfo) WaybarOutput {
 	artistString := strings.Join(player.Metadata.Artist, ", ")
 	tooltip := fmt.Sprintf("%s\nby %s\nfrom %s", player.Metadata.Title, artistString, player.Metadata.Album)
 	text := fmt.Sprintf("%s - %s", artistString, player.Metadata.Title)
-	class := getWaybarClass(player.Status.PlaybackStatus)
+	status := getWaybarClass(player.Status.PlaybackStatus)
 
 	waybarOut := WaybarOutput{
 		Text:    text,
 		Tooltip: tooltip,
-		Class:   class,
+		Class:   status,
 	}
 
 	return waybarOut
@@ -45,7 +45,7 @@ func FormatTooltip(metadata mpris.TrackMetadata) string {
 }
 
 func getWaybarClass(status string) string {
-	switch strings.ToLower(status) {
+	switch strings.ToLower(strings.Trim(status, "\"")) {
 	case "playing":
 		return "playing"
 	case "paused":
