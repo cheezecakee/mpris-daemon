@@ -28,7 +28,7 @@ func NewMPRISClient() (*MPRISClient, error) {
 		return nil, fmt.Errorf("failed to create dbus connection: %s", err)
 	}
 
-	fmt.Println("DBUS connect: ", newConn.Connected())
+	// fmt.Println("DBUS connect: ", newConn.Connected())
 
 	return &MPRISClient{
 		Conn:    newConn,
@@ -84,7 +84,7 @@ func (m *MPRISClient) StartListening(ctx context.Context, updates chan<- PlayerI
 		return fmt.Errorf("failed to add signal match for NameOwnerChanged: %w", err)
 	}
 
-	fmt.Println("Listening...")
+	// fmt.Println("Listening...")
 
 	go func() {
 		for {

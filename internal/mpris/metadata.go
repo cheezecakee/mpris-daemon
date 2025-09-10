@@ -148,7 +148,9 @@ func (m *MPRISClient) GetBaseProperties(serviceName string) (map[string]any, err
 
 func extractStringProperty(props map[string]dbus.Variant, key string) string {
 	if variant, exists := props[key]; exists {
-		return variant.String()
+		if str, ok := variant.Value().(string); ok {
+			return str
+		}
 	}
 	return ""
 }
